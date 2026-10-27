@@ -3,7 +3,7 @@
 This folder contains a Markdown wiki for an initial Go + PostgreSQL digital lending platform design.
 
 ## Files
-Refer to Wiki
+Refer to [Wiki](https://github.com/suwarnold/DigitalLendingPlatform/wiki/Digital-Lending-Platform)
 
 ## Import into Wiki
 1. Create or open a project Wiki.

@@ -1,0 +1,262 @@
+openapi: 3.0.3
+info:
+  title: Digital Lending Platform API
+  version: 0.1.0
+  description: |
+    Phase 1 foundation endpoints for borrower registration and authentication.
+
+    1. Register a borrower (`POST /api/v1/borrowers`)
+    2. Login (`POST /api/v1/auth/login`) and copy `access_token`
+    3. Click **Authorize**, paste the token, then call the protected endpoints
+servers:
+  - url: http://localhost:8080
+    description: Local development
+tags:
+  - name: Health
+    description: Process and dependency probes
+  - name: Auth
+    description: Borrower authentication
+  - name: Borrowers
+    description: Registration, profile, and stub KYC
+paths:
+  /healthz:
+    get:
+      tags: [Health]
+      operationId: healthz
+      summary: Liveness probe
+      responses:
+        "200":
+          description: Process is running
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: ok
+  /readyz:
+    get:
+      tags: [Health]
+      operationId: readyz
+      summary: Readiness probe
+      responses:
+        "200":
+          description: Database is reachable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: ready
+        "503":
+          $ref: "#/components/responses/Error"
+  /metrics:
+    get:
+      tags: [Health]
+      operationId: metrics
+      summary: Prometheus metrics
+      responses:
+        "200":
+          description: Metrics exposition format
+  /api/v1/borrowers:
+    post:
+      tags: [Borrowers]
+      operationId: registerBorrower
+      summary: Register a borrower
+      description: |
+        Phone numbers are normalized to Indonesian E.164 (`0812...` becomes `+62812...`).
+        Repeat the same body with the same `Idempotency-Key` to replay a cached 201.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+            example:
+              full_name: Ada Lovelace
+              phone_number: "081234567890"
+              email: ada@example.com
+              password: supersecret
+      responses:
+        "201":
+          description: Borrower created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Borrower"
+        "400":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      operationId: login
+      summary: Authenticate a borrower
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+            example:
+              phone_number: "081234567890"
+              password: supersecret
+      responses:
+        "200":
+          description: Access token issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+  /api/v1/borrowers/me:
+    get:
+      tags: [Borrowers]
+      operationId: getMe
+      summary: Get the authenticated borrower profile
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current borrower
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Borrower"
+        "401":
+          $ref: "#/components/responses/Error"
+  /api/v1/borrowers/verify-identity:
+    post:
+      tags: [Borrowers]
+      operationId: verifyIdentity
+      summary: Start stub identity verification
+      description: Sets KYC status to `IN_REVIEW`. Repeat calls are idempotent for the same borrower.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: KYC status updated to IN_REVIEW
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Borrower"
+        "401":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Paste the `access_token` from login. Do not include the `Bearer ` prefix.
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Optional key to safely retry registration. Max 255 characters.
+      schema:
+        type: string
+        maxLength: 255
+        example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [full_name, phone_number, password]
+      properties:
+        full_name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          example: Ada Lovelace
+        phone_number:
+          type: string
+          description: Indonesian number. `08...`, `62...`, or `+62...` are accepted.
+          example: "081234567890"
+        email:
+          type: string
+          format: email
+          example: ada@example.com
+        password:
+          type: string
+          minLength: 8
+          maxLength: 72
+          format: password
+          example: supersecret
+    LoginRequest:
+      type: object
+      required: [phone_number, password]
+      properties:
+        phone_number:
+          type: string
+          example: "081234567890"
+        password:
+          type: string
+          format: password
+          example: supersecret
+    Borrower:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        full_name:
+          type: string
+        phone_number:
+          type: string
+          example: "+6281234567890"
+        email:
+          type: string
+          nullable: true
+        kyc_status:
+          type: string
+          enum: [PENDING, IN_REVIEW, VERIFIED, REJECTED]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    TokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          example: Bearer
+        expires_in:
+          type: integer
+          description: Token lifetime in seconds
+          example: 86400
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+          example: VALIDATION_ERROR
+        message:
+          type: string
+        request_id:
+          type: string
+          format: uuid
+  responses:
+    Error:
+      description: Error response
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"

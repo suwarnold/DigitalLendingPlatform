@@ -1,0 +1,10 @@
+.bin
+.git
+.github
+.tmp
+.env
+bin/
+dist/
+coverage.out
+README.md
+*.md
